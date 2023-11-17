@@ -1,0 +1,13 @@
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = 4.1
+
+[libraries]
+linux.debug.x86_64 =     "res://../target/debug/lib/rust_bindings.so"
+linux.release.x86_64 =   "res://../target/release/lib/rust_bindings.so"
+windows.debug.x86_64 =   "res://../target/debug/rust_bindings.dll"
+windows.release.x86_64 = "res://../target/release/rust_bindings.dll"
+macos.debug =            "res://../target/debug/librust_bindings.dylib"
+macos.release =          "res://../target/release/librust_bindings.dylib"
+macos.debug.arm64 =      "res://../target/debug/librust_bindings.dylib"
+macos.release.arm64 =    "res://../target/release/librust_bindings.dylib"

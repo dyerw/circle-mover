@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use nalgebra::{Point2, Vector2};
+use nalgebra::{point, Point2, Vector2};
 use smol::{
     channel,
     channel::{Receiver, Sender},
@@ -9,16 +9,22 @@ use smol::{
 
 #[derive(Clone, Debug)]
 pub struct Circle {
-    player_id: u8,
-    circle_id: u128, // auto-incrementing
-    speed: f32,      // map units per second
-    position: Point2<f32>,
-    destination: Option<Point2<f32>>,
+    pub player_id: u8,
+    pub circle_id: i64, // auto-incrementing
+    pub speed: f32,     // map units per second
+    pub position: Point2<f32>,
+    pub destination: Option<Point2<f32>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Game {
-    circles: Vec<Circle>,
+    pub circles: Vec<Circle>,
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Game {
@@ -30,19 +36,18 @@ impl Game {
 
     pub fn add_circle(&mut self, position: Point2<f32>, player_id: u8) {
         self.circles.push(Circle {
-            player_id: player_id,
-            // Will panic if unit count is higher than u128, unlikely
-            circle_id: u128::try_from(self.circles.len()).unwrap(),
+            player_id,
+            // Will panic if unit count is higher than i64, unlikely
+            circle_id: i64::try_from(self.circles.len()).unwrap(),
             speed: 1.0,
             position,
             destination: None,
         })
     }
-    pub fn set_destination(&mut self, destination: Point2<f32>, circle_id: u128) {
+    pub fn set_destination(&mut self, destination: Point2<f32>, circle_id: i64) {
         let circle = self.circles.iter_mut().find(|c| c.circle_id == circle_id);
-        match circle {
-            Some(c) => c.destination = Some(destination),
-            None => {}
+        if let Some(c) = circle {
+            c.destination = Some(destination)
         }
     }
     pub fn step(&mut self, ds: f32) {
@@ -50,23 +55,20 @@ impl Game {
     }
     fn step_movement(&mut self, ds: f32) {
         for c in self.circles.iter_mut() {
-            match c.destination {
-                Some(d) => {
-                    let translation_vec: Vector2<f32> =
-                        (d - c.position).normalize().scale(c.speed * ds);
-                    let new_pos = c.position + translation_vec;
-                    println!(
-                        "pos: {:?}, translation vec: {:?}, new_pos: {:?}",
-                        c.position, translation_vec, new_pos
-                    );
-                    c.position = new_pos;
-                }
-                None => {}
+            if let Some(d) = c.destination {
+                let translation_vec: Vector2<f32> =
+                    (d - c.position).normalize().scale(c.speed * ds);
+                let new_pos = c.position + translation_vec;
+                println!(
+                    "pos: {:?}, translation vec: {:?}, new_pos: {:?}",
+                    c.position, translation_vec, new_pos
+                );
+                c.position = new_pos;
             }
         }
     }
 
-    fn circle_owned_by(&self, circle_id: u128, player_id: u8) -> bool {
+    fn circle_owned_by(&self, circle_id: i64, player_id: u8) -> bool {
         match self.circles.iter().find(|c| c.circle_id == circle_id) {
             Some(c) => c.player_id == player_id,
             None => false,
@@ -75,18 +77,24 @@ impl Game {
 }
 
 pub enum InputType {
-    CreateCircle(Point2<f32>),
-    SetDestination(u128, Point2<f32>),
+    CreateCircle { x: f32, y: f32 },
+    SetDestination { circle_id: i64, x: f32, y: f32 },
 }
 
 pub struct Input {
-    player_id: u8,
-    input_type: InputType,
+    pub player_id: u8,
+    pub input_type: InputType,
 }
 
 pub struct CmSim {
     game: Game,
     current_tick: u128,
+}
+
+impl Default for CmSim {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CmSim {
@@ -131,13 +139,10 @@ impl CmSim {
                     cm_sim.current_tick,
                     elapsed.as_micros()
                 );
-                match stop_receiver.try_recv() {
-                    Ok(()) => {
-                        println!("Stop received");
-                        // Stop loop, finish task
-                        break;
-                    }
-                    Err(_) => {}
+                if let Ok(()) = stop_receiver.try_recv() {
+                    println!("Stop received");
+                    // Stop loop, finish task
+                    break;
                 }
             }
         });
@@ -150,10 +155,12 @@ impl CmSim {
             n += 1;
             let input = input_receiver.try_recv().unwrap();
             match input.input_type {
-                InputType::CreateCircle(p) => self.game.add_circle(p, input.player_id),
-                InputType::SetDestination(id, d) => {
-                    if self.game.circle_owned_by(id, input.player_id) {
-                        self.game.set_destination(d, id)
+                InputType::CreateCircle { x, y } => {
+                    self.game.add_circle(point![x, y], input.player_id)
+                }
+                InputType::SetDestination { circle_id, x, y } => {
+                    if self.game.circle_owned_by(circle_id, input.player_id) {
+                        self.game.set_destination(point![x, y], circle_id)
                     }
                 }
             }
@@ -165,8 +172,6 @@ impl CmSim {
 
 #[cfg(test)]
 mod tests {
-
-    use nalgebra::point;
 
     use super::*;
 
@@ -190,7 +195,7 @@ mod tests {
                 let _ = input_sender
                     .send(Input {
                         player_id: 0,
-                        input_type: InputType::CreateCircle(point![0.0, 0.0]),
+                        input_type: InputType::CreateCircle { x: 0.0, y: 0.0 },
                     })
                     .await;
             }
@@ -219,14 +224,18 @@ mod tests {
             let _ = input_sender
                 .send(Input {
                     player_id: 0,
-                    input_type: InputType::CreateCircle(point![0.0, 0.0]),
+                    input_type: InputType::CreateCircle { x: 0.0, y: 0.0 },
                 })
                 .await;
 
             let _ = input_sender
                 .send(Input {
                     player_id: 0,
-                    input_type: InputType::SetDestination(0, point![5.0, 0.0]),
+                    input_type: InputType::SetDestination {
+                        circle_id: 0,
+                        x: 5.0,
+                        y: 0.0,
+                    },
                 })
                 .await;
 

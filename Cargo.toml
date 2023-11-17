@@ -1,0 +1,3 @@
+[workspace]
+
+members = ["cm-sim", "cm-server", "./cm-client/rust-bindings"]
