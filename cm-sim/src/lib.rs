@@ -39,7 +39,7 @@ impl Game {
             player_id,
             // Will panic if unit count is higher than i64, unlikely
             circle_id: i64::try_from(self.circles.len()).unwrap(),
-            speed: 1.0,
+            speed: 20.0,
             position,
             destination: None,
         })

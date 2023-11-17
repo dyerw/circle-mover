@@ -68,7 +68,7 @@ impl CmSimGD {
     #[func]
     fn start_sim(&mut self) {
         godot_print!("Starting sim from rust");
-        let (task, stop_chan, state_rec, input_sender) = CmSim::start(Duration::from_millis(250));
+        let (task, stop_chan, state_rec, input_sender) = CmSim::start(Duration::from_millis(2));
 
         self.input_sender = Some(input_sender);
         self.stop_sender = Some(stop_chan);
@@ -99,11 +99,11 @@ impl CmSimGD {
     }
 
     #[func]
-    fn add_circle(&self) {
+    fn add_circle(&self, pos: Vector2) {
         if let Some(input_sender) = &self.input_sender {
             if let Err(e) = input_sender.try_send(SimInput {
                 player_id: 0,
-                input_type: cm_sim::InputType::CreateCircle { x: 0.0, y: 0.0 },
+                input_type: cm_sim::InputType::CreateCircle { x: pos.x, y: pos.y },
             }) {
                 godot_error!("Add Circle send error: {:?}", e)
             }
@@ -113,11 +113,20 @@ impl CmSimGD {
     }
 
     #[func]
-    fn stop(&self) {}
-
-    #[func]
-    fn set_destination(&self) {}
-
-    #[signal]
-    fn sim_state_update(sim_state: Gd<SimStateGD>);
+    fn set_destination(&self, circle_id: i64, pos: Vector2) {
+        if let Some(input_sender) = &self.input_sender {
+            if let Err(e) = input_sender.try_send(SimInput {
+                player_id: 0,
+                input_type: cm_sim::InputType::SetDestination {
+                    circle_id,
+                    x: pos.x,
+                    y: pos.y,
+                },
+            }) {
+                godot_error!("SetDestination send error: {:?}", e)
+            }
+        } else {
+            godot_error!("Cannot set destination, sim not started")
+        }
+    }
 }
