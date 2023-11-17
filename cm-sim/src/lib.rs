@@ -9,7 +9,7 @@ use smol::{
 
 #[derive(Clone, Debug)]
 pub struct Circle {
-    _player_id: u8,
+    player_id: u8,
     circle_id: u128, // auto-incrementing
     speed: f32,      // map units per second
     position: Point2<f32>,
@@ -30,7 +30,7 @@ impl Game {
 
     pub fn add_circle(&mut self, position: Point2<f32>, player_id: u8) {
         self.circles.push(Circle {
-            _player_id: player_id,
+            player_id: player_id,
             // Will panic if unit count is higher than u128, unlikely
             circle_id: u128::try_from(self.circles.len()).unwrap(),
             speed: 1.0,
@@ -53,11 +53,23 @@ impl Game {
             match c.destination {
                 Some(d) => {
                     let translation_vec: Vector2<f32> =
-                        (c.position - d).normalize().scale(c.speed * ds);
-                    c.position = c.position + translation_vec;
+                        (d - c.position).normalize().scale(c.speed * ds);
+                    let new_pos = c.position + translation_vec;
+                    println!(
+                        "pos: {:?}, translation vec: {:?}, new_pos: {:?}",
+                        c.position, translation_vec, new_pos
+                    );
+                    c.position = new_pos;
                 }
                 None => {}
             }
+        }
+    }
+
+    fn circle_owned_by(&self, circle_id: u128, player_id: u8) -> bool {
+        match self.circles.iter().find(|c| c.circle_id == circle_id) {
+            Some(c) => c.player_id == player_id,
+            None => false,
         }
     }
 }
@@ -139,7 +151,11 @@ impl CmSim {
             let input = input_receiver.try_recv().unwrap();
             match input.input_type {
                 InputType::CreateCircle(p) => self.game.add_circle(p, input.player_id),
-                InputType::SetDestination(id, d) => self.game.set_destination(d, id),
+                InputType::SetDestination(id, d) => {
+                    if self.game.circle_owned_by(id, input.player_id) {
+                        self.game.set_destination(d, id)
+                    }
+                }
             }
         }
         println!("Received {} inputs this tick", n);
@@ -189,7 +205,42 @@ mod tests {
                 states.push(state);
             }
 
-            println!("{:?}", states);
+            println!("{:?}", states.len());
+            task.await
+        })
+    }
+
+    #[test]
+    fn circles_move() {
+        smol::block_on(async {
+            let (task, stop_chan, state_rec, input_sender) =
+                CmSim::start(Duration::from_millis(250));
+
+            let _ = input_sender
+                .send(Input {
+                    player_id: 0,
+                    input_type: InputType::CreateCircle(point![0.0, 0.0]),
+                })
+                .await;
+
+            let _ = input_sender
+                .send(Input {
+                    player_id: 0,
+                    input_type: InputType::SetDestination(0, point![5.0, 0.0]),
+                })
+                .await;
+
+            Timer::after(Duration::from_secs(5)).await;
+            let _ = stop_chan.send(());
+
+            let mut states: Vec<Game> = vec![];
+
+            while !state_rec.is_empty() {
+                let state = state_rec.try_recv().unwrap();
+                states.push(state);
+            }
+
+            println!("{:?}", states.last());
             task.await
         })
     }
