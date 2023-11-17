@@ -454,6 +454,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "godot-rust-client"
+version = "0.1.0"
+dependencies = [
+ "cm-sim",
+ "godot",
+ "oneshot",
+ "smol",
+]
+
+[[package]]
 name = "godot4-prebuilt"
 version = "0.0.0"
 source = "git+https://github.com/godot-rust/godot4-prebuilt?branch=4.1.1#fca6897dbfb1a2d9387f81491acd77f6f091b8c4"
@@ -803,16 +813,6 @@ name = "regex-syntax"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
-
-[[package]]
-name = "rust-bindings"
-version = "0.1.0"
-dependencies = [
- "cm-sim",
- "godot",
- "oneshot",
- "smol",
-]
 
 [[package]]
 name = "rustix"
