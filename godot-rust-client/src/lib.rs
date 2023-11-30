@@ -1,11 +1,9 @@
 use std::time::Duration;
 
-use cm_sim::{CmSim, Game, Input as SimInput};
+use cm_sim::{game::Game, CmSim, Input as SimInput};
 use godot::prelude::*;
-use smol::{
-    channel::{Receiver, Sender},
-    Task,
-};
+use tokio::sync::{mpsc::Sender, watch::Receiver};
+use tokio_util::sync::CancellationToken;
 
 struct CmSimExtension;
 
@@ -44,10 +42,9 @@ struct CmSimGD {
     // Can be used if you need access to the RefCounted GD object
     // #[base]
     // base: Base<RefCounted>,
-    sim_task: Option<Task<()>>,
-    input_sender: Option<Sender<SimInput>>,
-    stop_sender: Option<oneshot::Sender<()>>,
-    state_receiver: Option<Receiver<Game>>,
+    input_tx: Option<Sender<SimInput>>,
+    state_rx: Option<Receiver<(u16, Game)>>,
+    cancellation_token: Option<CancellationToken>,
 }
 
 #[godot_api]
@@ -55,10 +52,9 @@ impl IRefCounted for CmSimGD {
     fn init(_base: Base<RefCounted>) -> Self {
         // We don't have any channels until the sim is started
         Self {
-            sim_task: None,
-            input_sender: None,
-            stop_sender: None,
-            state_receiver: None,
+            input_tx: None,
+            state_rx: None,
+            cancellation_token: None,
         }
     }
 }
@@ -68,40 +64,38 @@ impl CmSimGD {
     #[func]
     fn start_sim(&mut self) {
         godot_print!("Starting sim from rust");
-        let (task, stop_chan, state_rec, input_sender) = CmSim::start(Duration::from_millis(2));
+        let (state_rx, input_tx, ct) = CmSim::start(Duration::from_millis(2));
 
-        self.input_sender = Some(input_sender);
-        self.stop_sender = Some(stop_chan);
-        self.sim_task = Some(task);
-        self.state_receiver = Some(state_rec);
+        self.input_tx = Some(input_tx);
+        self.state_rx = Some(state_rx);
+        self.cancellation_token = Some(ct);
     }
 
     #[func]
     fn stop_sim(&self) {
         godot_print!("Stopping sim");
-        // IDK figure this out
-        // if let Some(t) = &self.sim_task {
-        //     t.cancel();
-        // }
+        if let Some(ct) = &self.cancellation_token {
+            ct.cancel();
+        }
     }
 
     #[func]
     fn get_latest_state(&self) -> Option<Gd<SimStateGD>> {
-        let mut latest_game_message: Option<Game> = None;
-
-        if let Some(rx) = &self.state_receiver {
-            while !rx.is_empty() {
-                latest_game_message = Some(rx.try_recv().unwrap());
-            }
+        if let Some(rx) = &self.state_rx {
+            let (_, game) = rx.borrow().clone();
+            Some(Gd::new(SimStateGD::from(game)))
+        } else {
+            // Error can't get latest game from un init
+            None
         }
-
-        latest_game_message.map(|g| Gd::new(SimStateGD::from(g)))
     }
 
     #[func]
     fn add_circle(&self, pos: Vector2) {
-        if let Some(input_sender) = &self.input_sender {
-            if let Err(e) = input_sender.try_send(SimInput {
+        if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
+            let (tick, _) = *state_rx.borrow();
+            if let Err(e) = input_tx.try_send(SimInput {
+                for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::CreateCircle { x: pos.x, y: pos.y },
             }) {
@@ -114,8 +108,10 @@ impl CmSimGD {
 
     #[func]
     fn set_destination(&self, circle_id: i64, pos: Vector2) {
-        if let Some(input_sender) = &self.input_sender {
-            if let Err(e) = input_sender.try_send(SimInput {
+        if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
+            let (tick, _) = *state_rx.borrow();
+            if let Err(e) = input_tx.try_send(SimInput {
+                for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::SetDestination {
                     circle_id,
