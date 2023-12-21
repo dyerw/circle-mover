@@ -1,8 +1,19 @@
-use std::time::Duration;
+mod network_client;
+
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
 
 use cm_sim::{game::Game, CmSim, Input as SimInput};
 use godot::prelude::*;
-use tokio::sync::{mpsc::Sender, watch::Receiver};
+use network_client::client;
+use quinn::Connection;
+use tokio::{
+    runtime::{EnterGuard, Runtime},
+    sync::{mpsc::Sender, watch::Receiver},
+};
 use tokio_util::sync::CancellationToken;
 
 struct CmSimExtension;
@@ -39,22 +50,22 @@ impl From<Game> for SimStateGD {
 
 #[derive(GodotClass)]
 struct CmSimGD {
-    // Can be used if you need access to the RefCounted GD object
-    // #[base]
-    // base: Base<RefCounted>,
     input_tx: Option<Sender<SimInput>>,
     state_rx: Option<Receiver<(u16, Game)>>,
     cancellation_token: Option<CancellationToken>,
+    runtime_ref: Option<Runtime>,
 }
 
 #[godot_api]
 impl IRefCounted for CmSimGD {
     fn init(_base: Base<RefCounted>) -> Self {
+        // let server_connection = client().unwrap();
         // We don't have any channels until the sim is started
         Self {
             input_tx: None,
             state_rx: None,
             cancellation_token: None,
+            runtime_ref: None,
         }
     }
 }
@@ -64,11 +75,16 @@ impl CmSimGD {
     #[func]
     fn start_sim(&mut self) {
         godot_print!("Starting sim from rust");
-        let (state_rx, input_tx, ct) = CmSim::start(Duration::from_millis(2));
 
+        let rt = Runtime::new().unwrap();
+        let _enter_guard = rt.enter();
+
+        self.runtime_ref = Some(rt);
+
+        let (state_rx, input_tx, ct) = CmSim::start(Duration::from_millis(2));
         self.input_tx = Some(input_tx);
         self.state_rx = Some(state_rx);
-        self.cancellation_token = Some(ct);
+        self.cancellation_token = Some(ct.clone());
     }
 
     #[func]
@@ -94,6 +110,7 @@ impl CmSimGD {
     fn add_circle(&self, pos: Vector2) {
         if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
             let (tick, _) = *state_rx.borrow();
+            // TODO: Figure out latency for tick
             if let Err(e) = input_tx.try_send(SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
@@ -125,4 +142,11 @@ impl CmSimGD {
             godot_error!("Cannot set destination, sim not started")
         }
     }
+
+    // QUIC/protobuf test fns
+    #[func]
+    fn say_hello(&self) {}
+
+    #[func]
+    fn say_goodbye(&self) {}
 }

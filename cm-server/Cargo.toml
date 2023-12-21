@@ -11,3 +11,5 @@ rustls = { version = "*", features = ["dangerous_configuration", "quic"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.10"
 rcgen = "0.12.0"
+cm-sim = { path = "../cm-sim" }
+cm-protos = { path = "../cm-protos" }

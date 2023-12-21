@@ -10,6 +10,7 @@ var circles_by_id = {}
 func _ready():
 	print("godot root _ready")
 	sim.start_sim()
+	print("sim started")
 
 func _process(dt):
 	var state = sim.get_latest_state()

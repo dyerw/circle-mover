@@ -2,6 +2,17 @@ syntax = "proto3";
 
 package cm.messages;
 
+message CircleMoverMessage {
+    oneof value {
+        Hello hello = 1;
+        Goodbye goodbye = 2;
+    }
+}
+
 message Hello {
+    string name = 1;
+}
+
+message Goodbye {
     string name = 1;
 }

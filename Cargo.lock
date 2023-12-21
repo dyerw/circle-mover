@@ -126,6 +126,8 @@ dependencies = [
 name = "cm-server"
 version = "0.1.0"
 dependencies = [
+ "cm-protos",
+ "cm-sim",
  "quinn",
  "rcgen",
  "rustls",
@@ -311,8 +313,10 @@ dependencies = [
 name = "godot-rust-client"
 version = "0.1.0"
 dependencies = [
+ "cm-protos",
  "cm-sim",
  "godot",
+ "quinn",
  "tokio",
  "tokio-util",
 ]

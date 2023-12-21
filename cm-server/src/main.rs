@@ -1,5 +1,9 @@
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
+use cm_protos::{
+    cm_proto::messages::{circle_mover_message::Value, CircleMoverMessage},
+    deserialize_message,
+};
 use quinn::Endpoint;
 
 static SERVER_NAME: &str = "localhost";
@@ -28,10 +32,24 @@ async fn server() -> Result<(), Box<dyn Error>> {
     // Start iterating over incoming connections.
     while let Some(conn) = endpoint.accept().await {
         let connection = conn.await?;
-        let (mut send, mut recv) = connection.open_bi().await?;
+        let (mut _send, mut recv) = connection.open_bi().await?;
 
         let received = recv.read_to_end(10).await?;
-        // WE HAVE BYTES
+        if let Ok(msg) = deserialize_message(&received) {
+            match msg {
+                CircleMoverMessage {
+                    value: Some(Value::Hello(hello_msg)),
+                } => {
+                    println!("Hello ${}", hello_msg.name)
+                }
+                CircleMoverMessage {
+                    value: Some(Value::Goodbye(goodbye_msg)),
+                } => {
+                    println!("Goodbye ${}", goodbye_msg.name)
+                }
+                _ => {}
+            }
+        }
     }
 
     Ok(())
