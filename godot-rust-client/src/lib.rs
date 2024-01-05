@@ -1,17 +1,13 @@
-mod network_client;
+mod actors;
+mod util;
 
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-    time::Duration,
-};
+use std::time::Duration;
 
+use actors::network::NetworkActorHandle;
 use cm_sim::{game::Game, CmSim, Input as SimInput};
 use godot::prelude::*;
-use network_client::client;
-use quinn::Connection;
 use tokio::{
-    runtime::{EnterGuard, Runtime},
+    runtime::Runtime,
     sync::{mpsc::Sender, watch::Receiver},
 };
 use tokio_util::sync::CancellationToken;
@@ -54,30 +50,36 @@ struct CmSimGD {
     state_rx: Option<Receiver<(u16, Game)>>,
     cancellation_token: Option<CancellationToken>,
     runtime_ref: Option<Runtime>,
+    network_handle: Option<NetworkActorHandle>,
 }
 
 #[godot_api]
 impl IRefCounted for CmSimGD {
+    // TODO: Moving the contents of start_sim here causes problems but it would mean we
+    // could get rid of all the Option
     fn init(_base: Base<RefCounted>) -> Self {
-        // let server_connection = client().unwrap();
         // We don't have any channels until the sim is started
         Self {
             input_tx: None,
             state_rx: None,
             cancellation_token: None,
             runtime_ref: None,
+            network_handle: None,
         }
     }
 }
 
 #[godot_api]
 impl CmSimGD {
+    // TODO: Moving this to init to avoid Option types causes tokio::task::spawn to panic
     #[func]
     fn start_sim(&mut self) {
         godot_print!("Starting sim from rust");
 
         let rt = Runtime::new().unwrap();
         let _enter_guard = rt.enter();
+
+        self.network_handle = Some(NetworkActorHandle::new());
 
         self.runtime_ref = Some(rt);
 
@@ -145,8 +147,18 @@ impl CmSimGD {
 
     // QUIC/protobuf test fns
     #[func]
-    fn say_hello(&self) {}
+    fn say_hello(&self) {
+        if let Some(ref handle) = self.network_handle {
+            godot_print!("Sending hello");
+            handle.send_hello();
+        }
+    }
 
     #[func]
-    fn say_goodbye(&self) {}
+    fn say_goodbye(&self) {
+        if let Some(ref handle) = self.network_handle {
+            godot_print!("Sending goodbye");
+            handle.send_goodbye();
+        }
+    }
 }

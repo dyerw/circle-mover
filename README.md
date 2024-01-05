@@ -18,6 +18,7 @@ In this way the game client and the running the exact same logic.
 
 ## References
 
+- [Actors With Tokio](https://ryhl.io/blog/actors-with-tokio/)
 - [1500 Archers on a 28.8: Network Programming in Age of Empires and Beyond](https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond)
 - [James Anhalt & Tim Morten Interview: SnowPlay Technology & Stormgate](https://screenrant.com/james-anhalt-tim-morten-interview-snowplay-technology-stormgate/)
 - [The Revolution of StarCraft Network Traffic](https://myslu.stlawu.edu/~clee/docs/starcraft2.netgames.2012.pdf)

@@ -13,3 +13,5 @@ cm-protos = { path = "../cm-protos" }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.10"
 quinn = "0.10.2"
+rustls = { version = "*", features = ["dangerous_configuration", "quic"] }
+anyhow = "1.0.79"

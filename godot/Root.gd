@@ -34,6 +34,8 @@ func _input(event):
 		var world_pos = view_to_world * event.position
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			sim.add_circle(world_pos)
+			sim.say_hello()
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			sim.say_goodbye()
 			for id in circles_by_id.keys():
 				sim.set_destination(id, world_pos)
