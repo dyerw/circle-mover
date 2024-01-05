@@ -2,7 +2,6 @@ use anyhow::Result;
 use prost::{decode_length_delimiter, length_delimiter_len};
 use quinn::Endpoint;
 use std::{error::Error, net::SocketAddr, sync::Arc};
-use tokio::io::AsyncReadExt;
 
 use cm_protos::{
     cm_proto::messages::{circle_mover_message::Value, CircleMoverMessage},
