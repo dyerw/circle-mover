@@ -107,7 +107,7 @@ async fn handle_connection(conn: quinn::Connecting) -> Result<()> {
             trace!("Waiting for more bytes to complete proto message");
             let mut rest_buf = vec![0u8; rest_len];
             recv.read_exact(&mut rest_buf).await?;
-            trace!("Received all necessary bites");
+            trace!("Received all necessary bytes");
 
             let msg_buf = [&len_delimeter_buf[delim_len..], &rest_buf[..]].concat();
             trace!("Message buffer constructed {:?}", msg_buf);
