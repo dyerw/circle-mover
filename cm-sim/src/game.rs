@@ -1,4 +1,8 @@
-use nalgebra::{Point2, Vector2};
+use std::time::Duration;
+
+use nalgebra::{point, Point2, Vector2};
+
+use crate::{Input, InputType};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Circle {
@@ -27,6 +31,21 @@ impl Game {
         }
     }
 
+    pub fn step(&mut self, dt: Duration) {
+        self.step_movement(dt);
+    }
+
+    pub fn handle_input(&mut self, input: Input) {
+        match input.input_type {
+            InputType::CreateCircle { x, y } => self.add_circle(point![x, y], input.player_id),
+            InputType::SetDestination { circle_id, x, y } => {
+                if self.circle_owned_by(circle_id, input.player_id) {
+                    self.set_destination(point![x, y], circle_id)
+                }
+            }
+        }
+    }
+
     pub fn add_circle(&mut self, position: Point2<f32>, player_id: i32) {
         self.circles.push(Circle {
             player_id,
@@ -43,14 +62,12 @@ impl Game {
             c.destination = Some(destination)
         }
     }
-    pub fn step(&mut self, ds: f32) {
-        self.step_movement(ds);
-    }
-    fn step_movement(&mut self, ds: f32) {
+    fn step_movement(&mut self, dt: Duration) {
         for c in self.circles.iter_mut() {
             if let Some(d) = c.destination {
-                let translation_vec: Vector2<f32> =
-                    (d - c.position).normalize().scale(c.speed * ds);
+                let translation_vec: Vector2<f32> = (d - c.position)
+                    .normalize()
+                    .scale(c.speed * dt.as_secs_f32());
                 let new_pos = c.position + translation_vec;
                 println!(
                     "pos: {:?}, translation vec: {:?}, new_pos: {:?}",

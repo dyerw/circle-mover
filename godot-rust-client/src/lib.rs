@@ -4,13 +4,9 @@ mod util;
 use std::time::Duration;
 
 use actors::network::NetworkActorHandle;
-use cm_sim::{game::Game, CmSim, Input as SimInput};
+use cm_sim::{actor::SimActorHandle, game::Game, Input as SimInput};
 use godot::prelude::*;
-use tokio::{
-    runtime::Runtime,
-    sync::{mpsc::Sender, watch::Receiver},
-};
-use tokio_util::sync::CancellationToken;
+use tokio::runtime::Runtime;
 
 struct CmSimExtension;
 
@@ -46,11 +42,9 @@ impl From<Game> for SimStateGD {
 
 #[derive(GodotClass)]
 struct CmSimGD {
-    input_tx: Option<Sender<SimInput>>,
-    state_rx: Option<Receiver<(i32, Game)>>,
-    cancellation_token: Option<CancellationToken>,
     runtime_ref: Option<Runtime>,
     network_handle: Option<NetworkActorHandle>,
+    sim_handle: Option<SimActorHandle>,
 }
 
 #[godot_api]
@@ -60,11 +54,9 @@ impl IRefCounted for CmSimGD {
     fn init(_base: Base<RefCounted>) -> Self {
         // We don't have any channels until the sim is started
         Self {
-            input_tx: None,
-            state_rx: None,
-            cancellation_token: None,
             runtime_ref: None,
             network_handle: None,
+            sim_handle: None,
         }
     }
 }
@@ -80,47 +72,38 @@ impl CmSimGD {
         let _enter_guard = rt.enter();
 
         self.network_handle = Some(NetworkActorHandle::new());
+        self.sim_handle = Some(SimActorHandle::new(Duration::from_millis(5)));
 
         self.runtime_ref = Some(rt);
-
-        let (state_rx, input_tx, ct) = CmSim::start(Duration::from_millis(2));
-        self.input_tx = Some(input_tx);
-        self.state_rx = Some(state_rx);
-        self.cancellation_token = Some(ct.clone());
     }
 
     #[func]
     fn stop_sim(&self) {
         godot_print!("Stopping sim");
-        if let Some(ct) = &self.cancellation_token {
-            ct.cancel();
-        }
+        todo!();
     }
 
     #[func]
-    fn get_latest_state(&self) -> Option<Gd<SimStateGD>> {
-        if let Some(rx) = &self.state_rx {
-            let (_, game) = rx.borrow().clone();
+    fn get_latest_state(&mut self) -> Option<Gd<SimStateGD>> {
+        if let Some(ref mut sim_handle) = self.sim_handle {
+            let (_, game) = sim_handle.get_latest_game_state();
             Some(Gd::new(SimStateGD::from(game)))
         } else {
-            // Error can't get latest game from un init
             None
         }
     }
 
     #[func]
-    fn add_circle(&self, pos: Vector2) {
-        if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
-            let (tick, _) = *state_rx.borrow();
+    fn add_circle(&mut self, pos: Vector2) {
+        if let Some(ref mut sim_handle) = self.sim_handle {
+            let (tick, _) = sim_handle.get_latest_game_state();
+            // TODO: Figure out latency for tick
             let input = SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::CreateCircle { x: pos.x, y: pos.y },
             };
-            // TODO: Figure out latency for tick
-            if let Err(e) = input_tx.try_send(input) {
-                godot_error!("Add Circle send error: {:?}", e)
-            }
+            sim_handle.send_input(input);
             if let Some(ref handle) = self.network_handle {
                 handle.send_input(input);
             }
@@ -130,9 +113,9 @@ impl CmSimGD {
     }
 
     #[func]
-    fn set_destination(&self, circle_id: i64, pos: Vector2) {
-        if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
-            let (tick, _) = *state_rx.borrow();
+    fn set_destination(&mut self, circle_id: i64, pos: Vector2) {
+        if let Some(ref mut sim_handle) = self.sim_handle {
+            let (tick, _) = sim_handle.get_latest_game_state();
             let input = SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
@@ -142,9 +125,7 @@ impl CmSimGD {
                     y: pos.y,
                 },
             };
-            if let Err(e) = input_tx.try_send(input) {
-                godot_error!("SetDestination send error: {:?}", e)
-            }
+            sim_handle.send_input(input);
             if let Some(ref handle) = self.network_handle {
                 handle.send_input(input);
             }

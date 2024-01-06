@@ -9,9 +9,8 @@ use prost::Message;
 use std::io::Cursor;
 
 use cm_proto::messages::{
-    circle_mover_message::SubMessage,
-    player_input::{self, InputType},
-    CircleMoverMessage, CreateCircle, Goodbye, Hello, PlayerInput, SetDestination, Vec2,
+    circle_mover_message::SubMessage, player_input::InputType, CircleMoverMessage, CreateCircle,
+    Goodbye, Hello, PlayerInput, SetDestination, Vec2,
 };
 
 pub fn create_hello(name: String) -> CircleMoverMessage {
