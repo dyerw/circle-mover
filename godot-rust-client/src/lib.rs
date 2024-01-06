@@ -47,7 +47,7 @@ impl From<Game> for SimStateGD {
 #[derive(GodotClass)]
 struct CmSimGD {
     input_tx: Option<Sender<SimInput>>,
-    state_rx: Option<Receiver<(u16, Game)>>,
+    state_rx: Option<Receiver<(i32, Game)>>,
     cancellation_token: Option<CancellationToken>,
     runtime_ref: Option<Runtime>,
     network_handle: Option<NetworkActorHandle>,
@@ -112,13 +112,17 @@ impl CmSimGD {
     fn add_circle(&self, pos: Vector2) {
         if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
             let (tick, _) = *state_rx.borrow();
-            // TODO: Figure out latency for tick
-            if let Err(e) = input_tx.try_send(SimInput {
+            let input = SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::CreateCircle { x: pos.x, y: pos.y },
-            }) {
+            };
+            // TODO: Figure out latency for tick
+            if let Err(e) = input_tx.try_send(input) {
                 godot_error!("Add Circle send error: {:?}", e)
+            }
+            if let Some(ref handle) = self.network_handle {
+                handle.send_input(input);
             }
         } else {
             godot_error!("Cannot add circle, sim not started")
@@ -129,7 +133,7 @@ impl CmSimGD {
     fn set_destination(&self, circle_id: i64, pos: Vector2) {
         if let Some((input_tx, state_rx)) = self.input_tx.as_ref().zip(self.state_rx.as_ref()) {
             let (tick, _) = *state_rx.borrow();
-            if let Err(e) = input_tx.try_send(SimInput {
+            let input = SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::SetDestination {
@@ -137,8 +141,12 @@ impl CmSimGD {
                     x: pos.x,
                     y: pos.y,
                 },
-            }) {
+            };
+            if let Err(e) = input_tx.try_send(input) {
                 godot_error!("SetDestination send error: {:?}", e)
+            }
+            if let Some(ref handle) = self.network_handle {
+                handle.send_input(input);
             }
         } else {
             godot_error!("Cannot set destination, sim not started")

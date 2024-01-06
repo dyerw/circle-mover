@@ -15,16 +15,16 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum InputType {
     CreateCircle { x: f32, y: f32 },
     SetDestination { circle_id: i64, x: f32, y: f32 },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Input {
-    pub for_tick: u16,
-    pub player_id: u8,
+    pub for_tick: i32,
+    pub player_id: i32,
     pub input_type: InputType,
 }
 
@@ -32,7 +32,7 @@ const INPUT_BUFFER_SIZE: usize = 10;
 
 pub struct CmSim {
     game: Game,
-    current_tick: u16,
+    current_tick: i32,
     // index 0 is for the current tick, 1 is current + 1, etc
     input_buffer: [Vec<Input>; INPUT_BUFFER_SIZE],
 }
@@ -61,9 +61,12 @@ impl CmSim {
             if let Some(input) = input {
                 if input.for_tick >= sim_lock.current_tick {
                     let current_tick = sim_lock.current_tick;
-                    let tick_vector = &mut sim_lock.input_buffer
-                        [Into::<usize>::into(input.for_tick - current_tick)];
-                    tick_vector.push(input);
+                    if let Ok(tick_idx) = usize::try_from(input.for_tick - current_tick) {
+                        let tick_vector = &mut sim_lock.input_buffer[tick_idx];
+                        tick_vector.push(input);
+                    } else {
+                        // TODO: tick index difference is too big??
+                    }
                 } else {
                     // TODO: What to do if receiving an input for a previous tick?
                 }
@@ -74,7 +77,7 @@ impl CmSim {
     async fn run_sim(
         tick_length: Duration,
         sim_ref: Arc<Mutex<CmSim>>,
-        state_tx: watch::Sender<(u16, Game)>,
+        state_tx: watch::Sender<(i32, Game)>,
     ) {
         // By default Interval has the "Burst" MissedTickStragegy
         // TODO: Find some way to be notified if this happens
@@ -97,12 +100,12 @@ impl CmSim {
     pub fn start(
         tick_length: Duration,
     ) -> (
-        watch::Receiver<(u16, Game)>,
+        watch::Receiver<(i32, Game)>,
         Sender<Input>,
         CancellationToken,
     ) {
         let (input_tx, input_rx) = mpsc::channel(64);
-        let (state_tx, state_rx) = watch::channel::<(u16, Game)>((0, Game::new()));
+        let (state_tx, state_rx) = watch::channel::<(i32, Game)>((0, Game::new()));
 
         let cancellation_token = CancellationToken::new();
         let ct_input_clone = cancellation_token.clone();
@@ -208,44 +211,5 @@ mod tests {
                 input_type: InputType::CreateCircle { x: 0.0, y: 0.0 },
             })
             .await;
-    }
-
-    #[test]
-    fn circles_move() {
-        //     smol::block_on(async {
-        //         let (task, stop_chan, state_rec, input_sender) =
-        //             CmSim::start(Duration::from_millis(250));
-
-        //         let _ = input_sender
-        //             .send(Input {
-        //                 player_id: 0,
-        //                 input_type: InputType::CreateCircle { x: 0.0, y: 0.0 },
-        //             })
-        //             .await;
-
-        //         let _ = input_sender
-        //             .send(Input {
-        //                 player_id: 0,
-        //                 input_type: InputType::SetDestination {
-        //                     circle_id: 0,
-        //                     x: 5.0,
-        //                     y: 0.0,
-        //                 },
-        //             })
-        //             .await;
-
-        //         Timer::after(Duration::from_secs(5)).await;
-        //         let _ = stop_chan.send(());
-
-        //         let mut states: Vec<Game> = vec![];
-
-        //         while !state_rec.is_empty() {
-        //             let state = state_rec.try_recv().unwrap();
-        //             states.push(state);
-        //         }
-
-        //         println!("{:?}", states.last());
-        //         task.await
-        //     })
     }
 }

@@ -6,10 +6,7 @@ use tracing::{error, info, info_span, trace, trace_span};
 use tracing_futures::Instrument;
 use tracing_subscriber;
 
-use cm_protos::{
-    cm_proto::messages::{circle_mover_message::Value, CircleMoverMessage},
-    deserialize_message,
-};
+use cm_protos::deserialize_message;
 
 static SERVER_NAME: &str = "localhost";
 
@@ -115,15 +112,15 @@ async fn handle_connection(conn: quinn::Connecting) -> Result<()> {
             match deserialize_message(&msg_buf) {
                 Ok(msg) => {
                     info!("Received message: {:?}", msg);
-                    match msg {
-                        CircleMoverMessage {
-                            value: Some(Value::Hello(_hello_msg)),
-                        } => {}
-                        CircleMoverMessage {
-                            value: Some(Value::Goodbye(_goodbye_msg)),
-                        } => {}
-                        CircleMoverMessage { value: None } => {}
-                    }
+                    // match msg {
+                    //     CircleMoverMessage {
+                    //         value: Some(Value::Hello(_hello_msg)),
+                    //     } => {}
+                    //     CircleMoverMessage {
+                    //         value: Some(Value::Goodbye(_goodbye_msg)),
+                    //     } => {}
+                    //     CircleMoverMessage { value: None } => {}
+                    // }
                 }
                 Err(e) => {
                     error!("Proto decode error: {:?}", e)

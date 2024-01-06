@@ -118,6 +118,7 @@ name = "cm-protos"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "cm-sim",
  "prost",
  "prost-build",
 ]

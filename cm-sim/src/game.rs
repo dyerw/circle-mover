@@ -2,7 +2,7 @@ use nalgebra::{Point2, Vector2};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Circle {
-    pub player_id: u8,
+    pub player_id: i32,
     pub circle_id: i64, // auto-incrementing
     pub speed: f32,     // map units per second
     pub position: Point2<f32>,
@@ -27,7 +27,7 @@ impl Game {
         }
     }
 
-    pub fn add_circle(&mut self, position: Point2<f32>, player_id: u8) {
+    pub fn add_circle(&mut self, position: Point2<f32>, player_id: i32) {
         self.circles.push(Circle {
             player_id,
             // Will panic if unit count is higher than i64, unlikely
@@ -61,7 +61,7 @@ impl Game {
         }
     }
 
-    pub fn circle_owned_by(&self, circle_id: i64, player_id: u8) -> bool {
+    pub fn circle_owned_by(&self, circle_id: i64, player_id: i32) -> bool {
         match self.circles.iter().find(|c| c.circle_id == circle_id) {
             Some(c) => c.player_id == player_id,
             None => false,

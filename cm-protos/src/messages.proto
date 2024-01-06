@@ -3,9 +3,10 @@ syntax = "proto3";
 package cm.messages;
 
 message CircleMoverMessage {
-    oneof value {
+    oneof sub_message {
         Hello hello = 1;
         Goodbye goodbye = 2;
+        PlayerInput player_input = 3;
     }
 }
 
@@ -15,4 +16,27 @@ message Hello {
 
 message Goodbye {
     string name = 1;
+}
+
+message PlayerInput {
+    int32 for_tick = 1;
+    int32 player_id = 2;
+    oneof input_type {
+        CreateCircle create_circle = 3;
+        SetDestination set_destination = 4;
+    }
+}
+
+message CreateCircle {
+    Vec2 position = 1;
+}
+
+message SetDestination {
+    int64 circle_id = 1;
+    Vec2 position = 2;
+}
+
+message Vec2 {
+    float x = 1;
+    float y = 2;
 }
