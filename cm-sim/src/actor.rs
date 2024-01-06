@@ -1,72 +1,91 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
+use queues::{IsQueue, Queue};
 use tokio::{
     sync::{mpsc, watch},
-    time,
+    time::{self, interval},
 };
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tokio_stream::{
+    wrappers::{IntervalStream, ReceiverStream},
+    StreamExt,
+};
 
-use crate::{
-    game::Game,
-    tick_sequenced_stream::{GetTick, TickSequencedEvent, TickSequencedStream},
-    Input,
-};
+use crate::{game::Game, Input};
 
 #[derive(Clone)]
 enum SimActorMessage {
     SendInput(Input),
 }
 
-impl GetTick for SimActorMessage {
-    fn get_tick(self) -> i32 {
-        match self {
-            Self::SendInput(input) => input.for_tick,
-        }
-    }
+enum TickOrMessage {
+    Tick,
+    Message(SimActorMessage),
 }
 
 struct SimActor {
-    input_stream: TickSequencedStream<SimActorMessage, ReceiverStream<SimActorMessage>>,
+    tick_length: Duration,
     game: Game,
     game_sender: watch::Sender<(i32, Game)>,
+    // Hashmap as a sparse array indexed by tick
+    input_buffer: HashMap<i32, Queue<Input>>,
+    current_tick: i32,
 }
 
 impl SimActor {
-    fn init(
-        receiver: mpsc::Receiver<SimActorMessage>,
-        game_sender: watch::Sender<(i32, Game)>,
-        tick_length: time::Duration,
-    ) -> Self {
-        let input_stream = TickSequencedStream::new(ReceiverStream::new(receiver), tick_length);
-
-        let game = Game::new();
+    fn init(game_sender: watch::Sender<(i32, Game)>, tick_length: time::Duration) -> Self {
+        let game = Game::new(tick_length);
         Self {
-            input_stream,
+            tick_length,
             game,
             game_sender,
+            input_buffer: HashMap::new(),
+            current_tick: 0,
         }
     }
 
-    async fn run(&mut self) {
-        while let Some(msg_or_tick) = self.input_stream.next().await {
-            match msg_or_tick {
-                TickSequencedEvent::Tick { dt, number } => self.tick(dt, number),
-                TickSequencedEvent::Event(msg) => self.handle_message(msg).await,
+    async fn run(&mut self, receiver: mpsc::Receiver<SimActorMessage>) {
+        let recv_stream = ReceiverStream::new(receiver).map(|m| TickOrMessage::Message(m));
+        let tick_stream =
+            IntervalStream::new(interval(self.tick_length)).map(|_| TickOrMessage::Tick);
+        let mut input_stream = recv_stream.merge(tick_stream);
+        while let Some(tick_or_msg) = input_stream.next().await {
+            match tick_or_msg {
+                TickOrMessage::Tick => self.tick(),
+                TickOrMessage::Message(msg) => self.handle_message(msg).await,
             }
         }
     }
 
-    fn tick(&mut self, dt: Duration, current_tick: i32) {
-        self.game.step(dt);
+    fn tick(&mut self) {
+        // Process all buffered input for this tick
+        if let Some(ref mut tick_buffer) = self.input_buffer.remove(&self.current_tick) {
+            while let Ok(input) = tick_buffer.remove() {
+                self.game.handle_input(input);
+            }
+        }
+
+        self.game.step();
         self.game_sender
-            .send_replace((current_tick, self.game.clone()));
+            .send_replace((self.current_tick, self.game.clone()));
+        self.current_tick += 1
     }
 
     async fn handle_message(&mut self, msg: SimActorMessage) {
         match msg {
-            SimActorMessage::SendInput(input) => self.game.handle_input(input),
+            SimActorMessage::SendInput(input) => self.buffer_input(input),
             // SimActorMessage::StartSim => self.start_sim(),
             // SimActorMessage::StopSim => self.stop_sim(),
+        }
+    }
+
+    fn buffer_input(&mut self, input: Input) {
+        // TODO: Check for < current_tick
+        if let Some(tick_buffer) = self.input_buffer.get_mut(&input.for_tick) {
+            tick_buffer.add(input).unwrap();
+        } else {
+            let mut queue = Queue::new();
+            queue.add(input).unwrap();
+            self.input_buffer.insert(input.for_tick, queue);
         }
     }
 }
@@ -80,10 +99,10 @@ pub struct SimActorHandle {
 impl SimActorHandle {
     pub fn new(tick_length: Duration) -> Self {
         let (message_sender, message_receiver) = mpsc::channel(256);
-        let (game_sender, game_receiver) = watch::channel((0, Game::new()));
+        let (game_sender, game_receiver) = watch::channel((0, Game::new(tick_length)));
         tokio::spawn(async move {
-            let mut actor = SimActor::init(message_receiver, game_sender, tick_length);
-            actor.run().await;
+            let mut actor = SimActor::init(game_sender, tick_length);
+            actor.run(message_receiver).await;
         });
 
         Self {

@@ -15,24 +15,20 @@ pub struct Circle {
 
 #[derive(Clone, Debug)]
 pub struct Game {
+    step_dt: Duration,
     pub circles: Vec<Circle>,
 }
 
-impl Default for Game {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Game {
-    pub fn new() -> Game {
+    pub fn new(step_dt: Duration) -> Game {
         Game {
+            step_dt,
             circles: Vec::new(),
         }
     }
 
-    pub fn step(&mut self, dt: Duration) {
-        self.step_movement(dt);
+    pub fn step(&mut self) {
+        self.step_movement();
     }
 
     pub fn handle_input(&mut self, input: Input) {
@@ -62,12 +58,12 @@ impl Game {
             c.destination = Some(destination)
         }
     }
-    fn step_movement(&mut self, dt: Duration) {
+    fn step_movement(&mut self) {
         for c in self.circles.iter_mut() {
             if let Some(d) = c.destination {
                 let translation_vec: Vector2<f32> = (d - c.position)
                     .normalize()
-                    .scale(c.speed * dt.as_secs_f32());
+                    .scale(c.speed * self.step_dt.as_secs_f32());
                 let new_pos = c.position + translation_vec;
                 println!(
                     "pos: {:?}, translation vec: {:?}, new_pos: {:?}",
