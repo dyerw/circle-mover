@@ -6,6 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tracing = "0.1"
+tracing-futures = "0.2"
+tracing-subscriber = "0.3"
 quinn = "0.10.2"
 rustls = { version = "*", features = ["dangerous_configuration", "quic"] }
 tokio = { version = "1", features = ["full"] }
