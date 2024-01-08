@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cm_protos::{
-    cm_proto::messages::CircleMoverMessage, create_goodbye, create_hello, create_input_message,
-    serialize_message,
+    cm_proto::messages::CircleMoverMessage, create_create_lobby, create_input_message,
+    create_join_lobby, serialize_message,
 };
 use cm_sim::Input;
 use godot::log::godot_error;
@@ -10,9 +10,9 @@ use tokio::sync::mpsc;
 use crate::util::network::connect;
 
 enum NetworkActorMessage {
-    SendHello,
-    SendGoodbye,
     SendInput(Input),
+    JoinLobby { name: String },
+    CreateLobby { name: String },
 }
 
 struct NetworkActor {
@@ -37,13 +37,28 @@ impl NetworkActor {
 
     async fn handle_message(&mut self, msg: NetworkActorMessage) {
         let result = match msg {
-            NetworkActorMessage::SendHello => self.send_hello().await,
-            NetworkActorMessage::SendGoodbye => self.send_goodbye().await,
             NetworkActorMessage::SendInput(input) => self.send_input(input).await,
+            NetworkActorMessage::CreateLobby { name } => self.send_create_lobby(name).await,
+            NetworkActorMessage::JoinLobby { name } => self.send_join_lobby(name).await,
         };
         if let Err(e) = result {
             godot_error!("{:?}", e);
         };
+    }
+
+    async fn send_create_lobby(&mut self, name: String) -> Result<()> {
+        let msg = create_create_lobby(name);
+        self.send_message(msg).await
+    }
+
+    async fn send_join_lobby(&mut self, name: String) -> Result<()> {
+        let msg = create_join_lobby(name);
+        self.send_message(msg).await
+    }
+
+    async fn send_input(&mut self, input: Input) -> Result<()> {
+        let msg = create_input_message(input);
+        self.send_message(msg).await
     }
 
     async fn send_message(&self, msg: CircleMoverMessage) -> Result<()> {
@@ -52,21 +67,6 @@ impl NetworkActor {
         send.write_all(&bytes).await?;
         send.finish().await?;
         Ok(())
-    }
-
-    async fn send_hello(&mut self) -> Result<()> {
-        let msg = create_hello("world".to_string());
-        self.send_message(msg).await
-    }
-
-    async fn send_goodbye(&mut self) -> Result<()> {
-        let msg = create_goodbye("world".to_string());
-        self.send_message(msg).await
-    }
-
-    async fn send_input(&mut self, input: Input) -> Result<()> {
-        let msg = create_input_message(input);
-        self.send_message(msg).await
     }
 }
 
@@ -89,18 +89,18 @@ impl NetworkActorHandle {
         Self { sender }
     }
 
-    pub fn send_hello(&self) {
-        let msg = NetworkActorMessage::SendHello;
-        self.sender.try_send(msg).expect("Failed to send hello");
-    }
-
-    pub fn send_goodbye(&self) {
-        let msg = NetworkActorMessage::SendGoodbye;
-        self.sender.try_send(msg).expect("Failed to send goodbye");
-    }
-
     pub fn send_input(&self, input: Input) {
         let msg = NetworkActorMessage::SendInput(input);
         self.sender.try_send(msg).expect("Failed to send input");
+    }
+
+    pub fn create_lobby(&self, name: String) {
+        let msg = NetworkActorMessage::CreateLobby { name };
+        self.sender.try_send(msg).expect("Failed to create lobby");
+    }
+
+    pub fn join_lobby(&self, name: String) {
+        let msg = NetworkActorMessage::JoinLobby { name };
+        self.sender.try_send(msg).expect("Failed to join lobby");
     }
 }

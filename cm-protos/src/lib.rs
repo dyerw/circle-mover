@@ -9,21 +9,10 @@ use prost::Message;
 use std::io::Cursor;
 
 use cm_proto::messages::{
-    circle_mover_message::SubMessage, player_input::InputType, CircleMoverMessage, CreateCircle,
-    Goodbye, Hello, PlayerInput, SetDestination, Vec2,
+    circle_mover_message::SubMessage, input_message::InputType, lobby_message::LobbySubMessage,
+    CircleMoverMessage, CreateCircle, CreateLobby, InputMessage, JoinLobby, LobbyMessage,
+    SetDestination, Vec2,
 };
-
-pub fn create_hello(name: String) -> CircleMoverMessage {
-    CircleMoverMessage {
-        sub_message: Some(SubMessage::Hello(Hello { name })),
-    }
-}
-
-pub fn create_goodbye(name: String) -> CircleMoverMessage {
-    CircleMoverMessage {
-        sub_message: Some(SubMessage::Goodbye(Goodbye { name })),
-    }
-}
 
 pub fn create_input_message(input: Input) -> CircleMoverMessage {
     let input_type = match input.input_type {
@@ -37,13 +26,29 @@ pub fn create_input_message(input: Input) -> CircleMoverMessage {
             })
         }
     };
-    let player_input = PlayerInput {
+    let player_input = InputMessage {
         for_tick: input.for_tick,
         player_id: input.player_id,
         input_type: Some(input_type),
     };
     CircleMoverMessage {
-        sub_message: Some(SubMessage::PlayerInput(player_input)),
+        sub_message: Some(SubMessage::InputMessage(player_input)),
+    }
+}
+
+pub fn create_create_lobby(name: String) -> CircleMoverMessage {
+    CircleMoverMessage {
+        sub_message: Some(SubMessage::LobbyMessage(LobbyMessage {
+            lobby_sub_message: Some(LobbySubMessage::CreateLobby(CreateLobby { name })),
+        })),
+    }
+}
+
+pub fn create_join_lobby(name: String) -> CircleMoverMessage {
+    CircleMoverMessage {
+        sub_message: Some(SubMessage::LobbyMessage(LobbyMessage {
+            lobby_sub_message: Some(LobbySubMessage::JoinLobby(JoinLobby { name })),
+        })),
     }
 }
 

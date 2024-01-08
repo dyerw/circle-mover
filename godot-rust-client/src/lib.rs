@@ -117,6 +117,7 @@ impl CmSimGD {
         if let Some(ref mut sim_handle) = self.sim_handle {
             let (tick, _) = sim_handle.get_latest_game_state();
             let input = SimInput {
+                // FIXME: Actually deal with latency
                 for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::SetDestination {
@@ -134,20 +135,17 @@ impl CmSimGD {
         }
     }
 
-    // QUIC/protobuf test fns
     #[func]
-    fn say_hello(&self) {
+    fn join_lobby(&self) {
         if let Some(ref handle) = self.network_handle {
-            godot_print!("Sending hello");
-            handle.send_hello();
+            handle.join_lobby("LOBBY".to_string());
         }
     }
 
     #[func]
-    fn say_goodbye(&self) {
+    fn create_lobby(&self) {
         if let Some(ref handle) = self.network_handle {
-            godot_print!("Sending goodbye");
-            handle.send_goodbye();
+            handle.create_lobby("LOBBY".to_string());
         }
     }
 }

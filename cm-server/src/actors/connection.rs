@@ -9,11 +9,11 @@ pub enum ConnectionMessage {
     ReceivedMessage(CircleMoverMessage),
 }
 
-pub struct ConnectionActor;
-
 pub struct ConnectionState {
     connection: quinn::Connection,
 }
+
+pub struct ConnectionActor;
 
 #[async_trait]
 impl Actor for ConnectionActor {

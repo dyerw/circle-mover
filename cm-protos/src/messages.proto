@@ -2,23 +2,36 @@ syntax = "proto3";
 
 package cm.messages;
 
+
 message CircleMoverMessage {
     oneof sub_message {
-        Hello hello = 1;
-        Goodbye goodbye = 2;
-        PlayerInput player_input = 3;
+        // Messages for controlling lobby states
+        LobbyMessage lobby_message = 1;
+        // Messages representing discrete player inputs
+        // for updating the simulation
+        InputMessage input_message = 2;
     }
 }
 
-message Hello {
+message LobbyMessage {
+    oneof lobby_sub_message {
+        CreateLobby create_lobby = 1;
+        JoinLobby join_lobby = 2;
+        StartGame start_game = 3;
+    }
+}
+
+message CreateLobby {
     string name = 1;
 }
 
-message Goodbye {
+message JoinLobby {
     string name = 1;
 }
 
-message PlayerInput {
+message StartGame {}
+
+message InputMessage {
     int32 for_tick = 1;
     int32 player_id = 2;
     oneof input_type {
