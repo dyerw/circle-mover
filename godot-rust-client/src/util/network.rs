@@ -1,8 +1,7 @@
 use anyhow::Result;
-use godot::log::godot_print;
 use std::{net::SocketAddr, sync::Arc};
 
-use quinn::{ClientConfig, Endpoint, RecvStream, SendStream};
+use quinn::{ClientConfig, Endpoint};
 
 static SERVER_NAME: &str = "localhost";
 
