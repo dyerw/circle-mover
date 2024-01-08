@@ -1,4 +1,5 @@
 use anyhow::Result;
+use godot::log::godot_print;
 use std::{net::SocketAddr, sync::Arc};
 
 use quinn::{ClientConfig, Endpoint, RecvStream, SendStream};
@@ -36,7 +37,7 @@ impl rustls::client::ServerCertVerifier for SkipServerVerification {
     }
 }
 
-pub async fn connect() -> Result<(SendStream, RecvStream)> {
+pub async fn connect() -> Result<quinn::Connection> {
     let crypto = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -51,7 +52,5 @@ pub async fn connect() -> Result<(SendStream, RecvStream)> {
     // Connect to the server passing in the server name which is supposed to be in the server certificate.
     let connection = endpoint.connect(server_addr(), SERVER_NAME)?.await?;
 
-    let (send, recv) = connection.open_bi().await?;
-
-    return Ok((send, recv));
+    return Ok(connection);
 }

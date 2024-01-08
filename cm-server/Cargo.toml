@@ -18,3 +18,4 @@ cm-sim = { path = "../cm-sim" }
 cm-protos = { path = "../cm-protos" }
 anyhow = "1.0.79"
 prost = "0.12.3" 
+ractor = "0.9"

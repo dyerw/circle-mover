@@ -1,7 +1,10 @@
 use anyhow::Result;
-use cm_protos::{create_goodbye, create_hello, create_input_message, serialize_message};
+use cm_protos::{
+    cm_proto::messages::CircleMoverMessage, create_goodbye, create_hello, create_input_message,
+    serialize_message,
+};
 use cm_sim::Input;
-use quinn::{RecvStream, SendStream};
+use godot::log::godot_error;
 use tokio::sync::mpsc;
 
 use crate::util::network::connect;
@@ -14,7 +17,7 @@ enum NetworkActorMessage {
 
 struct NetworkActor {
     receiver: mpsc::Receiver<NetworkActorMessage>,
-    connection: (SendStream, RecvStream),
+    connection: quinn::Connection,
 }
 
 impl NetworkActor {
@@ -33,35 +36,37 @@ impl NetworkActor {
     }
 
     async fn handle_message(&mut self, msg: NetworkActorMessage) {
-        match msg {
+        let result = match msg {
             NetworkActorMessage::SendHello => self.send_hello().await,
             NetworkActorMessage::SendGoodbye => self.send_goodbye().await,
             NetworkActorMessage::SendInput(input) => self.send_input(input).await,
-        }
+        };
+        if let Err(e) = result {
+            godot_error!("{:?}", e);
+        };
     }
 
-    async fn send_hello(&mut self) {
-        let (ref mut send, _) = self.connection;
+    async fn send_message(&self, msg: CircleMoverMessage) -> Result<()> {
+        let bytes = serialize_message(msg);
+        let mut send = self.connection.open_uni().await?;
+        send.write_all(&bytes).await?;
+        send.finish().await?;
+        Ok(())
+    }
+
+    async fn send_hello(&mut self) -> Result<()> {
         let msg = create_hello("world".to_string());
-        let bytes = serialize_message(msg);
-
-        send.write_all(&bytes).await.expect("Failed to write");
+        self.send_message(msg).await
     }
 
-    async fn send_goodbye(&mut self) {
-        let (ref mut send, _) = self.connection;
+    async fn send_goodbye(&mut self) -> Result<()> {
         let msg = create_goodbye("world".to_string());
-        let bytes = serialize_message(msg);
-
-        send.write_all(&bytes).await.expect("Failed to write");
+        self.send_message(msg).await
     }
 
-    async fn send_input(&mut self, input: Input) {
-        let (ref mut send, _) = self.connection;
+    async fn send_input(&mut self, input: Input) -> Result<()> {
         let msg = create_input_message(input);
-        let bytes = serialize_message(msg);
-
-        send.write_all(&bytes).await.expect("Failed to write");
+        self.send_message(msg).await
     }
 }
 

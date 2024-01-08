@@ -48,8 +48,7 @@ pub fn create_input_message(input: Input) -> CircleMoverMessage {
 }
 
 pub fn serialize_message(msg: CircleMoverMessage) -> Vec<u8> {
-    let encoded_vec = msg.encode_length_delimited_to_vec();
-    encoded_vec
+    msg.encode_to_vec()
 }
 
 pub fn deserialize_message(buf: &[u8]) -> Result<CircleMoverMessage, prost::DecodeError> {
