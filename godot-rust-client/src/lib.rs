@@ -63,18 +63,32 @@ impl IRefCounted for CmSimGD {
 
 #[godot_api]
 impl CmSimGD {
+    #[func]
+    fn connect_to_server(&mut self) {
+        godot_print!("Connecting to server");
+        let rt = Runtime::new().unwrap();
+        let _enter_guard = rt.enter();
+
+        self.network_handle = Some(NetworkActorHandle::new());
+
+        self.runtime_ref = Some(rt);
+    }
+
+    #[func]
+    fn is_connected_to_server(&self) -> bool {
+        if let Some(handle) = &self.network_handle {
+            return handle.is_connected();
+        }
+        return false;
+    }
+
     // TODO: Moving this to init to avoid Option types causes tokio::task::spawn to panic
     #[func]
     fn start_sim(&mut self) {
         godot_print!("Starting sim from rust");
 
-        let rt = Runtime::new().unwrap();
-        let _enter_guard = rt.enter();
-
-        self.network_handle = Some(NetworkActorHandle::new());
-        self.sim_handle = Some(SimActorHandle::new(Duration::from_millis(5)));
-
-        self.runtime_ref = Some(rt);
+        // Roughly 45hz
+        self.sim_handle = Some(SimActorHandle::new(Duration::from_millis(22)));
     }
 
     #[func]
@@ -136,16 +150,16 @@ impl CmSimGD {
     }
 
     #[func]
-    fn join_lobby(&self) {
+    fn join_lobby(&self, name: String) {
         if let Some(ref handle) = self.network_handle {
-            handle.join_lobby("LOBBY".to_string());
+            handle.join_lobby(name);
         }
     }
 
     #[func]
-    fn create_lobby(&self) {
+    fn create_lobby(&self, name: String) {
         if let Some(ref handle) = self.network_handle {
-            handle.create_lobby("LOBBY".to_string());
+            handle.create_lobby(name);
         }
     }
 }

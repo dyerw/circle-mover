@@ -5,7 +5,7 @@ use cm_protos::{
 };
 use cm_sim::Input;
 use godot::log::godot_error;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use crate::util::network::connect;
 
@@ -73,20 +73,23 @@ impl NetworkActor {
 #[derive(Clone)]
 pub struct NetworkActorHandle {
     sender: mpsc::Sender<NetworkActorMessage>,
+    ready: watch::Receiver<bool>,
 }
 
 impl NetworkActorHandle {
     pub fn new() -> Self {
         // Arbitrary channel size, look into this, handling back pressure etc
         let (sender, receiver) = mpsc::channel(256);
+        let (ready_tx, ready) = watch::channel(false);
         tokio::spawn(async move {
             let mut actor = NetworkActor::init(receiver)
                 .await
                 .expect("NetworkHandle failed to init");
+            ready_tx.send_replace(true);
             actor.run().await;
         });
 
-        Self { sender }
+        Self { sender, ready }
     }
 
     pub fn send_input(&self, input: Input) {
@@ -102,5 +105,9 @@ impl NetworkActorHandle {
     pub fn join_lobby(&self, name: String) {
         let msg = NetworkActorMessage::JoinLobby { name };
         self.sender.try_send(msg).expect("Failed to join lobby");
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.ready.borrow().clone()
     }
 }
