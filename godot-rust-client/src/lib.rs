@@ -4,9 +4,14 @@ mod util;
 use std::time::Duration;
 
 use actors::network::NetworkActorHandle;
-use cm_sim::{actor::SimActorHandle, game::Game, Input as SimInput};
+use cm_sim::{
+    actor::{SimActor, SimArguments, SimMessage},
+    game::Game,
+    Input as SimInput,
+};
 use godot::prelude::*;
-use tokio::runtime::Runtime;
+use ractor::{Actor, ActorRef};
+use tokio::{runtime::Runtime, sync::watch};
 
 struct CmSimExtension;
 
@@ -40,11 +45,34 @@ impl From<Game> for SimStateGD {
     }
 }
 
+/// A sim actor bundled with a watch channel for synchonous game state access.
+/// In order to poll from Godot we need the actor updating the channel.
+struct SimReference {
+    sim_actor: ActorRef<SimMessage>,
+    game_state_receiver: watch::Receiver<(i32, Game)>,
+}
+
+impl SimReference {
+    fn send_input(&self, input: SimInput) {
+        self.sim_actor
+            .cast(SimMessage::SendInput(input))
+            .expect("Failed to send input");
+    }
+    fn get_current_tick(&self) -> i32 {
+        let (tick, _) = *self.game_state_receiver.borrow();
+        tick
+    }
+    fn get_game_state(&self) -> Gd<SimStateGD> {
+        let (_, game) = self.game_state_receiver.borrow().clone();
+        Gd::new(SimStateGD::from(game))
+    }
+}
+
 #[derive(GodotClass)]
 struct CmSimGD {
     runtime_ref: Option<Runtime>,
     network_handle: Option<NetworkActorHandle>,
-    sim_handle: Option<SimActorHandle>,
+    sim_ref: Option<SimReference>,
 }
 
 #[godot_api]
@@ -56,7 +84,7 @@ impl IRefCounted for CmSimGD {
         Self {
             runtime_ref: None,
             network_handle: None,
-            sim_handle: None,
+            sim_ref: None,
         }
     }
 }
@@ -87,8 +115,25 @@ impl CmSimGD {
     fn start_sim(&mut self) {
         godot_print!("Starting sim from rust");
 
-        // Roughly 45hz
-        self.sim_handle = Some(SimActorHandle::new(Duration::from_millis(22)));
+        if let Some(ref rt) = self.runtime_ref {
+            let (game_state_tx, game_state_rx) =
+                watch::channel((0, Game::new(Duration::from_millis(22))));
+            let (actor, _actor_handle) = rt
+                .block_on(Actor::spawn(
+                    Some("ClientSim".to_string()),
+                    SimActor,
+                    // Roughly 45hz
+                    SimArguments {
+                        minimum_tick_duration: Duration::from_millis(22),
+                        game_state_sender: game_state_tx,
+                    },
+                ))
+                .expect("Sim failed to start");
+            self.sim_ref = Some(SimReference {
+                sim_actor: actor,
+                game_state_receiver: game_state_rx,
+            });
+        }
     }
 
     #[func]
@@ -99,9 +144,8 @@ impl CmSimGD {
 
     #[func]
     fn get_latest_state(&mut self) -> Option<Gd<SimStateGD>> {
-        if let Some(ref mut sim_handle) = self.sim_handle {
-            let (_, game) = sim_handle.get_latest_game_state();
-            Some(Gd::new(SimStateGD::from(game)))
+        if let Some(ref sim) = self.sim_ref {
+            Some(sim.get_game_state())
         } else {
             None
         }
@@ -109,15 +153,15 @@ impl CmSimGD {
 
     #[func]
     fn add_circle(&mut self, pos: Vector2) {
-        if let Some(ref mut sim_handle) = self.sim_handle {
-            let (tick, _) = sim_handle.get_latest_game_state();
+        if let Some(ref sim) = self.sim_ref {
+            let tick = sim.get_current_tick();
             // TODO: Figure out latency for tick
             let input = SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
                 input_type: cm_sim::InputType::CreateCircle { x: pos.x, y: pos.y },
             };
-            sim_handle.send_input(input);
+            sim.send_input(input);
             if let Some(ref handle) = self.network_handle {
                 handle.send_input(input);
             }
@@ -128,8 +172,8 @@ impl CmSimGD {
 
     #[func]
     fn set_destination(&mut self, circle_id: i64, pos: Vector2) {
-        if let Some(ref mut sim_handle) = self.sim_handle {
-            let (tick, _) = sim_handle.get_latest_game_state();
+        if let Some(ref sim) = self.sim_ref {
+            let tick = sim.get_current_tick();
             let input = SimInput {
                 // FIXME: Actually deal with latency
                 for_tick: tick + 1,
@@ -140,7 +184,7 @@ impl CmSimGD {
                     y: pos.y,
                 },
             };
-            sim_handle.send_input(input);
+            sim.send_input(input);
             if let Some(ref handle) = self.network_handle {
                 handle.send_input(input);
             }
