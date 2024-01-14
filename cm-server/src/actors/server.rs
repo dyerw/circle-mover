@@ -1,12 +1,15 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Result;
 
-use quinn::Endpoint;
+use quinn::{Endpoint, IdleTimeout, TransportConfig};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use tracing::{error, info};
 
-use super::connection::{ConnectionActor, ConnectionMessage};
+use super::{
+    connection::{ConnectionActor, ConnectionArguments, ConnectionMessage},
+    lobby::{LobbyActor, LobbyArguments, LobbyMessage},
+};
 
 static SERVER_NAME: &str = "localhost";
 
@@ -22,10 +25,15 @@ fn generate_self_signed_cert() -> Result<(rustls::Certificate, rustls::PrivateKe
 
 pub enum ServerMessage {
     NewConnection(quinn::Connecting),
+    CreateLobby {
+        name: String,
+        host: ActorRef<ConnectionMessage>,
+    },
 }
 
 pub struct ServerState {
     connection_actors: Vec<ActorRef<ConnectionMessage>>,
+    lobbies: HashMap<String, ActorRef<LobbyMessage>>,
 }
 
 pub struct ServerActor;
@@ -46,7 +54,13 @@ impl Actor for ServerActor {
             .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(vec![cert], key_der)?;
-        let server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
+
+        let mut transport_config = TransportConfig::default();
+        transport_config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
+        transport_config.keep_alive_interval(Some(Duration::from_secs(2)));
+
+        server_config.transport_config(Arc::new(transport_config));
 
         let endpoint = Endpoint::server(server_config, server_addr())?;
 
@@ -61,21 +75,44 @@ impl Actor for ServerActor {
 
         Ok(ServerState {
             connection_actors: vec![],
+            lobbies: HashMap::new(),
         })
     }
 
     async fn handle(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             ServerMessage::NewConnection(conn) => {
-                let (actor, _actor_handle) = Actor::spawn(None, ConnectionActor, conn)
-                    .await
-                    .expect("Connection actor failed to start");
+                let (actor, _actor_handle) = Actor::spawn(
+                    None,
+                    ConnectionActor,
+                    ConnectionArguments {
+                        server_ref: myself,
+                        connecting: conn,
+                    },
+                )
+                .await
+                .expect("Connection actor failed to start");
                 state.connection_actors.push(actor);
+            }
+            ServerMessage::CreateLobby { name, host } => {
+                let name_key = name.clone();
+                let name_for_lobby = name.clone();
+                let (actor, _) = Actor::spawn(
+                    Some(name),
+                    LobbyActor,
+                    LobbyArguments {
+                        name: name_for_lobby,
+                        host_conn: host,
+                    },
+                )
+                .await
+                .expect("Failed to start lobby actor");
+                state.lobbies.insert(name_key, actor);
             }
         }
         Ok(())

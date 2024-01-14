@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 use queues::{IsQueue, Queue};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
@@ -9,6 +12,8 @@ use crate::{game::Game, Input};
 pub enum SimMessage {
     Tick,
     SendInput(Input),
+    StartAt(SystemTime),
+    Start,
 }
 
 pub struct SimState {
@@ -17,6 +22,7 @@ pub struct SimState {
     // Hashmap as a sparse array indexed by tick
     input_buffer: HashMap<i32, Queue<Input>>,
     current_tick: i32,
+    minimum_tick_duration: Duration,
 }
 
 impl SimState {
@@ -62,21 +68,21 @@ impl Actor for SimActor {
 
     async fn pre_start(
         &self,
-        myself: ActorRef<Self::Msg>,
+        _myself: ActorRef<Self::Msg>,
         arguments: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        myself.send_interval(arguments.minimum_tick_duration, || SimMessage::Tick);
         Ok(SimState {
             game_state_sender: arguments.game_state_sender,
             game: Game::new(arguments.minimum_tick_duration),
             input_buffer: HashMap::new(),
             current_tick: 0,
+            minimum_tick_duration: arguments.minimum_tick_duration,
         })
     }
 
     async fn handle(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         message: Self::Msg,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -86,6 +92,13 @@ impl Actor for SimActor {
             }
             SimMessage::SendInput(input) => {
                 state.buffer_input(input);
+            }
+            SimMessage::StartAt(ts) => {
+                // TODO: Validate that argument is in the future
+                myself.send_after(ts.duration_since(SystemTime::now())?, || SimMessage::Start);
+            }
+            SimMessage::Start => {
+                myself.send_interval(state.minimum_tick_duration, || SimMessage::Tick);
             }
         };
         Ok(())

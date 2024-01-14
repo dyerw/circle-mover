@@ -13,7 +13,9 @@ func _ready():
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
-	pass
+	var lobby_name = Brain.brain.is_lobby_joined()
+	if lobby_name:
+		get_tree().change_scene_to_file("res://lobby.tscn")
 
 
 func _on_join_lobby_button_pressed():

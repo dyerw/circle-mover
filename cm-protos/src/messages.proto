@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package cm.messages;
 
+import "google/protobuf/timestamp.proto";
 
 message CircleMoverMessage {
     oneof sub_message {
@@ -17,7 +18,9 @@ message LobbyMessage {
     oneof lobby_sub_message {
         CreateLobby create_lobby = 1;
         JoinLobby join_lobby = 2;
-        StartGame start_game = 3;
+        LobbyJoined lobby_joined = 3;
+        RequestStartGame request_start_game = 4;
+        SynchronizedGameStart synchronized_game_start = 5;
     }
 }
 
@@ -29,7 +32,15 @@ message JoinLobby {
     string name = 1;
 }
 
-message StartGame {}
+message LobbyJoined {
+    string name = 1;
+}
+
+message RequestStartGame {}
+
+message SynchronizedGameStart {
+    google.protobuf.Timestamp start_at = 1;
+}
 
 message InputMessage {
     int32 for_tick = 1;

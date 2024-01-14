@@ -1,10 +1,13 @@
 use anyhow::Result;
 use cm_protos::{
-    cm_proto::messages::CircleMoverMessage, create_create_lobby, create_input_message,
-    create_join_lobby, serialize_message,
+    cm_proto::messages::{
+        circle_mover_message::SubMessage, lobby_message::LobbySubMessage, CircleMoverMessage,
+        LobbyJoined, LobbyMessage,
+    },
+    create_create_lobby, create_input_message, create_join_lobby, read_message, serialize_message,
 };
 use cm_sim::Input;
-use godot::log::godot_error;
+use godot::log::{godot_error, godot_print};
 use tokio::sync::{mpsc, watch};
 
 use crate::util::network::connect;
@@ -21,8 +24,10 @@ struct NetworkActor {
 }
 
 impl NetworkActor {
-    async fn init(receiver: mpsc::Receiver<NetworkActorMessage>) -> Result<Self> {
-        let connection = connect().await?;
+    async fn init(
+        connection: quinn::Connection,
+        receiver: mpsc::Receiver<NetworkActorMessage>,
+    ) -> Result<Self> {
         Ok(NetworkActor {
             receiver,
             connection,
@@ -74,6 +79,7 @@ impl NetworkActor {
 pub struct NetworkActorHandle {
     sender: mpsc::Sender<NetworkActorMessage>,
     ready: watch::Receiver<bool>,
+    lobby: watch::Receiver<Option<String>>,
 }
 
 impl NetworkActorHandle {
@@ -81,15 +87,49 @@ impl NetworkActorHandle {
         // Arbitrary channel size, look into this, handling back pressure etc
         let (sender, receiver) = mpsc::channel(256);
         let (ready_tx, ready) = watch::channel(false);
+        let (lobby_tx, lobby) = watch::channel(None);
         tokio::spawn(async move {
-            let mut actor = NetworkActor::init(receiver)
+            let connection = connect().await.expect("Cannot connect to server");
+            let connection_clone = connection.clone();
+
+            let mut actor = NetworkActor::init(connection, receiver)
                 .await
                 .expect("NetworkHandle failed to init");
             ready_tx.send_replace(true);
+
+            // FIXME: None of this is scalable at all to receiving more messages
+            tokio::spawn(async move {
+                loop {
+                    match read_message(&connection_clone).await {
+                        Ok(msg) => {
+                            godot_print!("{:?}", msg);
+                            match msg {
+                                CircleMoverMessage {
+                                    sub_message:
+                                        Some(SubMessage::LobbyMessage(LobbyMessage {
+                                            lobby_sub_message:
+                                                Some(LobbySubMessage::LobbyJoined(LobbyJoined { name })),
+                                        })),
+                                } => {
+                                    lobby_tx.send_replace(Some(name));
+                                }
+                                _ => {}
+                            }
+                        }
+                        Err(e) => {
+                            godot_error!("Failed: {}", e.to_string());
+                        }
+                    }
+                }
+            });
             actor.run().await;
         });
 
-        Self { sender, ready }
+        Self {
+            sender,
+            ready,
+            lobby,
+        }
     }
 
     pub fn send_input(&self, input: Input) {
@@ -109,5 +149,9 @@ impl NetworkActorHandle {
 
     pub fn is_connected(&self) -> bool {
         self.ready.borrow().clone()
+    }
+
+    pub fn is_lobby_joined(&self) -> Option<String> {
+        self.lobby.borrow().clone()
     }
 }

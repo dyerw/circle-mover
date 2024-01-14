@@ -1,7 +1,7 @@
 use anyhow::Result;
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use quinn::{ClientConfig, Endpoint};
+use quinn::{ClientConfig, Endpoint, TransportConfig};
 
 static SERVER_NAME: &str = "localhost";
 
@@ -42,7 +42,14 @@ pub async fn connect() -> Result<quinn::Connection> {
         .with_custom_certificate_verifier(SkipServerVerification::new())
         .with_no_client_auth();
 
-    let config = ClientConfig::new(Arc::new(crypto));
+    let mut config = ClientConfig::new(Arc::new(crypto));
+
+    let mut transport_config = TransportConfig::default();
+    // Server has a 10 sec timeout
+    transport_config.keep_alive_interval(Some(Duration::from_secs(2)));
+    transport_config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
+
+    config.transport_config(Arc::new(transport_config));
 
     // Bind this endpoint to a UDP socket on the given client address.
     let mut endpoint = Endpoint::client(client_addr())?;

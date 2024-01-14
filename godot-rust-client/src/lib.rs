@@ -110,6 +110,15 @@ impl CmSimGD {
         return false;
     }
 
+    // FIXME: Empty string represents null, figure out why Option<String> is bad here
+    #[func]
+    fn is_lobby_joined(&self) -> String {
+        if let Some(handle) = &self.network_handle {
+            return handle.is_lobby_joined().unwrap_or_default();
+        }
+        return String::default();
+    }
+
     // TODO: Moving this to init to avoid Option types causes tokio::task::spawn to panic
     #[func]
     fn start_sim(&mut self) {
