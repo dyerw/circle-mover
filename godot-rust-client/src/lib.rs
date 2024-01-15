@@ -4,10 +4,10 @@ mod util;
 use std::time::Duration;
 
 use actors::network::NetworkActorHandle;
+use cm_shared_data::{Input as SimInput, InputType};
 use cm_sim::{
     actor::{SimActor, SimArguments, SimMessage},
     game::Game,
-    Input as SimInput,
 };
 use godot::prelude::*;
 use ractor::{Actor, ActorRef};
@@ -64,7 +64,7 @@ impl SimReference {
     }
     fn get_game_state(&self) -> Gd<SimStateGD> {
         let (_, game) = self.game_state_receiver.borrow().clone();
-        Gd::new(SimStateGD::from(game))
+        Gd::from_object(SimStateGD::from(game))
     }
 }
 
@@ -168,7 +168,7 @@ impl CmSimGD {
             let input = SimInput {
                 for_tick: tick + 1,
                 player_id: 0,
-                input_type: cm_sim::InputType::CreateCircle { x: pos.x, y: pos.y },
+                input_type: InputType::CreateCircle { x: pos.x, y: pos.y },
             };
             sim.send_input(input);
             if let Some(ref handle) = self.network_handle {
@@ -187,7 +187,7 @@ impl CmSimGD {
                 // FIXME: Actually deal with latency
                 for_tick: tick + 1,
                 player_id: 0,
-                input_type: cm_sim::InputType::SetDestination {
+                input_type: InputType::SetDestination {
                     circle_id,
                     x: pos.x,
                     y: pos.y,

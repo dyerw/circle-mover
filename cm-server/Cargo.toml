@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cm-shared-data = { path = "../cm-shared-data" }
 tracing = "0.1"
 tracing-futures = "0.2"
 tracing-subscriber = "0.3"
@@ -15,7 +16,5 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7.10"
 rcgen = "0.12.0"
 cm-sim = { path = "../cm-sim" }
-cm-protos = { path = "../cm-protos" }
 anyhow = "1.0.79"
-prost = "0.12.3" 
 ractor = "0.9"

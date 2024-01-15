@@ -3,11 +3,12 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use cm_shared_data::Input;
 use queues::{IsQueue, Queue};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 
-use crate::{game::Game, Input};
+use crate::game::Game;
 
 pub enum SimMessage {
     Tick,

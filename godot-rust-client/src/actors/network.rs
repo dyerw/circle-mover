@@ -1,12 +1,7 @@
 use anyhow::Result;
-use cm_protos::{
-    cm_proto::messages::{
-        circle_mover_message::SubMessage, lobby_message::LobbySubMessage, CircleMoverMessage,
-        LobbyJoined, LobbyMessage,
-    },
-    create_create_lobby, create_input_message, create_join_lobby, read_message, serialize_message,
+use cm_shared_data::{
+    read_message, ClientNetworkMessage, Input, ServerLobbyMessage, ServerNetworkMessage,
 };
-use cm_sim::Input;
 use godot::log::{godot_error, godot_print};
 use tokio::sync::{mpsc, watch};
 
@@ -52,22 +47,21 @@ impl NetworkActor {
     }
 
     async fn send_create_lobby(&mut self, name: String) -> Result<()> {
-        let msg = create_create_lobby(name);
+        let msg = ClientNetworkMessage::create_lobby(name)?;
         self.send_message(msg).await
     }
 
     async fn send_join_lobby(&mut self, name: String) -> Result<()> {
-        let msg = create_join_lobby(name);
+        let msg = ClientNetworkMessage::join_lobby(name)?;
         self.send_message(msg).await
     }
 
     async fn send_input(&mut self, input: Input) -> Result<()> {
-        let msg = create_input_message(input);
+        let msg = ClientNetworkMessage::input(input)?;
         self.send_message(msg).await
     }
 
-    async fn send_message(&self, msg: CircleMoverMessage) -> Result<()> {
-        let bytes = serialize_message(msg);
+    async fn send_message(&self, bytes: Vec<u8>) -> Result<()> {
         let mut send = self.connection.open_uni().await?;
         send.write_all(&bytes).await?;
         send.finish().await?;
@@ -104,13 +98,12 @@ impl NetworkActorHandle {
                         Ok(msg) => {
                             godot_print!("{:?}", msg);
                             match msg {
-                                CircleMoverMessage {
-                                    sub_message:
-                                        Some(SubMessage::LobbyMessage(LobbyMessage {
-                                            lobby_sub_message:
-                                                Some(LobbySubMessage::LobbyJoined(LobbyJoined { name })),
-                                        })),
-                                } => {
+                                ServerNetworkMessage::LobbyMessage(
+                                    ServerLobbyMessage::LobbyJoined {
+                                        name,
+                                        other_players: _,
+                                    },
+                                ) => {
                                     lobby_tx.send_replace(Some(name));
                                 }
                                 _ => {}

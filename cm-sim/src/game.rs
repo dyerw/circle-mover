@@ -1,8 +1,7 @@
 use std::time::Duration;
 
+use cm_shared_data::{Input, InputType};
 use nalgebra::{point, Point2, Vector2};
-
-use crate::{Input, InputType};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Circle {

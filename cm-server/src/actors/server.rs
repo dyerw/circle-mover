@@ -2,7 +2,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::Result;
 
-use quinn::{Endpoint, IdleTimeout, TransportConfig};
+use quinn::{Endpoint, TransportConfig};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use tracing::{error, info};
 
