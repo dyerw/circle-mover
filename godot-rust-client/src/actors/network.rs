@@ -5,7 +5,7 @@ use cm_shared_data::{
 use godot::log::{godot_error, godot_print};
 use tokio::sync::{mpsc, watch};
 
-use crate::util::network::connect;
+use crate::{classes::lobby_state::LobbyState, util::network::connect};
 
 enum NetworkActorMessage {
     SendInput(Input),
@@ -73,7 +73,7 @@ impl NetworkActor {
 pub struct NetworkActorHandle {
     sender: mpsc::Sender<NetworkActorMessage>,
     ready: watch::Receiver<bool>,
-    lobby: watch::Receiver<Option<String>>,
+    lobby_watch: watch::Receiver<LobbyState>,
 }
 
 impl NetworkActorHandle {
@@ -81,7 +81,7 @@ impl NetworkActorHandle {
         // Arbitrary channel size, look into this, handling back pressure etc
         let (sender, receiver) = mpsc::channel(256);
         let (ready_tx, ready) = watch::channel(false);
-        let (lobby_tx, lobby) = watch::channel(None);
+        let (lobby_tx, lobby_watch_rx) = watch::channel(LobbyState::NotJoined);
         tokio::spawn(async move {
             let connection = connect().await.expect("Cannot connect to server");
             let connection_clone = connection.clone();
@@ -104,7 +104,10 @@ impl NetworkActorHandle {
                                         other_players: _,
                                     },
                                 ) => {
-                                    lobby_tx.send_replace(Some(name));
+                                    lobby_tx.send_replace(LobbyState::Joined {
+                                        name,
+                                        players: vec![],
+                                    });
                                 }
                                 _ => {}
                             }
@@ -121,7 +124,7 @@ impl NetworkActorHandle {
         Self {
             sender,
             ready,
-            lobby,
+            lobby_watch: lobby_watch_rx,
         }
     }
 
@@ -144,7 +147,7 @@ impl NetworkActorHandle {
         self.ready.borrow().clone()
     }
 
-    pub fn is_lobby_joined(&self) -> Option<String> {
-        self.lobby.borrow().clone()
+    pub fn get_lobby_state(&self) -> LobbyState {
+        self.lobby_watch.borrow().clone()
     }
 }

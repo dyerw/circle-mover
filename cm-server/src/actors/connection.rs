@@ -5,7 +5,7 @@ use cm_shared_data::{
     read_message, ClientLobbyMessage, ClientNetworkMessage, ServerNetworkMessage,
 };
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
-use tracing::{error, info};
+use tracing::info;
 
 use super::{lobby::LobbyMessage, server::ServerMessage};
 
@@ -16,6 +16,7 @@ pub enum ConnectionMessage {
         lobby_ref: ActorRef<LobbyMessage>,
     },
     SendSynchronizedGameStart(SystemTime),
+    LostConnection,
 }
 
 pub struct ConnectionState {
@@ -54,11 +55,16 @@ impl Actor for ConnectionActor {
                     Ok(())
                 }) {
                     Ok(()) => {}
-                    Err(e) => {
-                        error!("Failed: {reason}", reason = e.to_string());
+                    Err(_) => {
+                        info!("Received error reading message, losing connection");
+                        myself
+                            .cast(ConnectionMessage::LostConnection)
+                            .expect("Failed to send lost connection");
+                        break;
                     }
                 }
             }
+            // info!("Ending async task for reading from connection {}", connection_clone.);
         });
 
         info!("Client connected");
@@ -108,6 +114,16 @@ impl Actor for ConnectionActor {
                 let bytes = ServerNetworkMessage::synchronized_game_start(start_at)?;
                 send.write_all(&bytes).await?;
                 send.finish().await?;
+            }
+            ConnectionMessage::LostConnection => {
+                info!("Connection lost");
+                if let Some(l) = &state.lobby_ref {
+                    l.cast(LobbyMessage::LostConnection(myself.get_id()))?;
+                }
+                state
+                    .server_ref
+                    .cast(ServerMessage::LostConnection(myself.get_id()))?;
+                myself.stop(Some("Connection lost".to_string()))
             }
         }
         Ok(())

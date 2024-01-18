@@ -3,7 +3,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 use anyhow::Result;
 
 use quinn::{Endpoint, TransportConfig};
-use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, Actor, ActorId, ActorProcessingErr, ActorRef};
 use tracing::{error, info};
 
 use super::{
@@ -29,6 +29,8 @@ pub enum ServerMessage {
         name: String,
         host: ActorRef<ConnectionMessage>,
     },
+    LostConnection(ActorId),
+    LobbyClosed(String),
 }
 
 pub struct ServerState {
@@ -106,6 +108,7 @@ impl Actor for ServerActor {
                     Some(name),
                     LobbyActor,
                     LobbyArguments {
+                        server_ref: myself,
                         name: name_for_lobby,
                         host_conn: host,
                     },
@@ -113,6 +116,16 @@ impl Actor for ServerActor {
                 .await
                 .expect("Failed to start lobby actor");
                 state.lobbies.insert(name_key, actor);
+            }
+            ServerMessage::LostConnection(id) => {
+                state.connection_actors.retain(|x| x.get_id() != id);
+                info!(
+                    "Removed connection from server, {} connections remaining",
+                    state.connection_actors.len()
+                );
+            }
+            ServerMessage::LobbyClosed(name) => {
+                state.lobbies.remove(&name);
             }
         }
         Ok(())

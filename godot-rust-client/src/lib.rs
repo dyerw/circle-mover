@@ -1,4 +1,5 @@
 mod actors;
+mod classes;
 mod util;
 
 use std::time::Duration;
@@ -13,37 +14,12 @@ use godot::prelude::*;
 use ractor::{Actor, ActorRef};
 use tokio::{runtime::Runtime, sync::watch};
 
+use classes::{game_state::GameState, lobby_state::GLobbyState};
+
 struct CmSimExtension;
 
 #[gdextension]
 unsafe impl ExtensionLibrary for CmSimExtension {}
-
-#[derive(GodotClass, GodotConvert, ToGodot)]
-pub struct SimStateGD {
-    #[var]
-    circle_ids: Array<i64>,
-    #[var]
-    circle_positions: Array<Vector2>,
-}
-
-#[godot_api]
-impl SimStateGD {}
-
-impl From<Game> for SimStateGD {
-    fn from(game: Game) -> Self {
-        let mut id_arr = Array::<i64>::new();
-        let mut pos_array = Array::<Vector2>::new();
-        for c in game.circles.iter() {
-            id_arr.push(c.circle_id);
-            pos_array.push(Vector2::new(c.position.x, c.position.y));
-        }
-
-        Self {
-            circle_ids: id_arr,
-            circle_positions: pos_array,
-        }
-    }
-}
 
 /// A sim actor bundled with a watch channel for synchonous game state access.
 /// In order to poll from Godot we need the actor updating the channel.
@@ -62,14 +38,17 @@ impl SimReference {
         let (tick, _) = *self.game_state_receiver.borrow();
         tick
     }
-    fn get_game_state(&self) -> Gd<SimStateGD> {
+    fn get_game_state(&self) -> Gd<GameState> {
         let (_, game) = self.game_state_receiver.borrow().clone();
-        Gd::from_object(SimStateGD::from(game))
+        Gd::from_object(GameState::from(game))
     }
 }
 
 #[derive(GodotClass)]
 struct CmSimGD {
+    #[base]
+    base: Base<RefCounted>,
+
     runtime_ref: Option<Runtime>,
     network_handle: Option<NetworkActorHandle>,
     sim_ref: Option<SimReference>,
@@ -79,9 +58,10 @@ struct CmSimGD {
 impl IRefCounted for CmSimGD {
     // TODO: Moving the contents of start_sim here causes problems but it would mean we
     // could get rid of all the Option
-    fn init(_base: Base<RefCounted>) -> Self {
+    fn init(base: Base<RefCounted>) -> Self {
         // We don't have any channels until the sim is started
         Self {
+            base,
             runtime_ref: None,
             network_handle: None,
             sim_ref: None,
@@ -108,15 +88,6 @@ impl CmSimGD {
             return handle.is_connected();
         }
         return false;
-    }
-
-    // FIXME: Empty string represents null, figure out why Option<String> is bad here
-    #[func]
-    fn is_lobby_joined(&self) -> String {
-        if let Some(handle) = &self.network_handle {
-            return handle.is_lobby_joined().unwrap_or_default();
-        }
-        return String::default();
     }
 
     // TODO: Moving this to init to avoid Option types causes tokio::task::spawn to panic
@@ -152,7 +123,7 @@ impl CmSimGD {
     }
 
     #[func]
-    fn get_latest_state(&mut self) -> Option<Gd<SimStateGD>> {
+    fn get_latest_state(&mut self) -> Option<Gd<GameState>> {
         if let Some(ref sim) = self.sim_ref {
             Some(sim.get_game_state())
         } else {
@@ -213,6 +184,16 @@ impl CmSimGD {
     fn create_lobby(&self, name: String) {
         if let Some(ref handle) = self.network_handle {
             handle.create_lobby(name);
+        }
+    }
+
+    #[func]
+    fn get_lobby_state(&self) -> Option<Gd<GLobbyState>> {
+        if let Some(nh) = &self.network_handle {
+            let lobby = nh.get_lobby_state();
+            Option::<GLobbyState>::from(lobby).map(|l| Gd::from_object(l))
+        } else {
+            None
         }
     }
 }

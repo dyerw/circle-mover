@@ -5,18 +5,20 @@ use cm_sim::{
     actor::{SimActor, SimArguments, SimMessage},
     game::Game,
 };
-use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, Actor, ActorId, ActorProcessingErr, ActorRef};
 use tokio::sync::watch;
 use tracing::info;
 
-use super::connection::ConnectionMessage;
+use super::{connection::ConnectionMessage, server::ServerMessage};
 
 pub enum LobbyMessage {
     AddPlayer(ActorRef<ConnectionMessage>),
     RequestStartGame,
+    LostConnection(ActorId),
 }
 
 pub struct LobbyState {
+    server_ref: ActorRef<ServerMessage>,
     name: String,
     host_conn: ActorRef<ConnectionMessage>,
     player_conns: Vec<ActorRef<ConnectionMessage>>,
@@ -25,6 +27,7 @@ pub struct LobbyState {
 }
 
 pub struct LobbyArguments {
+    pub server_ref: ActorRef<ServerMessage>,
     pub name: String,
     pub host_conn: ActorRef<ConnectionMessage>,
 }
@@ -49,6 +52,7 @@ impl Actor for LobbyActor {
             lobby_ref: myself,
         })?;
         Ok(LobbyState {
+            server_ref: arguments.server_ref,
             name: state_name,
             host_conn: arguments.host_conn,
             player_conns: vec![],
@@ -98,6 +102,15 @@ impl Actor for LobbyActor {
                 actor.cast(SimMessage::StartAt(start_at))?;
                 state.sim = Some(actor);
                 state.game_state_receiver = Some(state_rx);
+            }
+            // For now losing any connection kills the whole lobby
+            // we'll deal with disconnected states and handling this later
+            LobbyMessage::LostConnection(_) => {
+                info!("Closing lobby: {}", state.name);
+                state
+                    .server_ref
+                    .cast(ServerMessage::LobbyClosed(state.name.clone()))?;
+                myself.stop(Some("Lost connection".to_string()));
             }
         };
         Ok(())
