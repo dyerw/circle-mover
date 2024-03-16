@@ -3,8 +3,8 @@ entry_symbol = "gdext_rust_init"
 compatibility_minimum = 4.1
 
 [libraries]
-linux.debug.x86_64 =     "res://../target/debug/lib/godot_rust_client.so"
-linux.release.x86_64 =   "res://../target/release/lib/godot_rust_client.so"
+linux.debug.x86_64 =     "res://../target/debug/libgodot_rust_client.so"
+linux.release.x86_64 =   "res://../target/release/libgodot_rust_client.so"
 windows.debug.x86_64 =   "res://../target/debug/godot_rust_client.dll"
 windows.release.x86_64 = "res://../target/release/godot_rust_client.dll"
 macos.debug =            "res://../target/debug/libgodot_rust_client.dylib"
